@@ -1,0 +1,12 @@
+groups:
+  - name: kanban-maintenance
+    rules:
+      - alert: KanbanSessionCleanupStalled
+        expr: kanban_session_cleanup_age_seconds{job="kanban"} > 150
+          and on (job, instance) up{job="kanban"} == 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cron не обновляет метку успешной очистки сессий"
+          description: "Проверьте контейнер cron и вывод docker compose logs cron. Возраст последней очистки — {{ $value | humanizeDuration }}."

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use Illuminate\Database\Connection;
+use Illuminate\Database\Query\Builder;
 use SessionHandlerInterface;
 use SessionUpdateTimestampHandlerInterface;
 
@@ -79,7 +80,17 @@ final class DatabaseSessionHandler implements SessionHandlerInterface, SessionUp
 
     public function gc(int $max_lifetime): int
     {
-        return $this->database->table('sessions')->where('expires_at', '<=', time())->delete();
+        return $this->expiredSessions()->delete();
+    }
+
+    public function countExpired(): int
+    {
+        return $this->expiredSessions()->count();
+    }
+
+    private function expiredSessions(): Builder
+    {
+        return $this->database->table('sessions')->where('expires_at', '<=', time());
     }
 
     private function lock(string $id): void

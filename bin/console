@@ -6,6 +6,7 @@ use App\Config;
 use App\DatabaseSessionHandler;
 use App\Migrator;
 use App\SecretCipher;
+use App\SessionCleanup;
 
 $command = $argv[1] ?? 'help';
 $root = dirname(__DIR__);
@@ -53,8 +54,9 @@ try {
 
     require $root . '/bootstrap.php';
     if ($command === 'sessions:prune') {
-        $handler = new DatabaseSessionHandler($database->getConnection(), $config['session']['ttl']);
-        $result = ['deleted_sessions' => $handler->gc($config['session']['ttl'])];
+        $connection = $database->getConnection();
+        $handler = new DatabaseSessionHandler($connection, $config['session']['ttl']);
+        $result = ['deleted_sessions' => (new SessionCleanup($connection, $handler))->run()];
     } else {
         $migrator = new Migrator($database->getConnection(), $root . '/migrations');
         $result = $migrator->run($command);

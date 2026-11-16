@@ -2,6 +2,17 @@
 
 Учебный JSON API на PHP 8.5, Eloquent и PostgreSQL. Реализованы регистрация, вход, выход, доски с колонками и карточками. Запросы проходят через собственную маршрутизацию и MVC, сессии хранятся в PostgreSQL.
 
+## Задания по порядку
+
+| Задание | Где проверить |
+| --- | --- |
+| Поднять учебный Local Zoo | [Стенд Local Zoo](https://github.com/ewoeuieu/local_zoo_for_vyatgu) сохраняет исходное окружение nginx, PHP-FPM и PostgreSQL. В его README есть запуск и проверка `/health.php` |
+| Скелет, Eloquent, мигратор, Monolog | [История коммитов](https://github.com/ewoeuieu/kanban-vyatgu/commits/main/), [тестовая миграция](migrations/001_create_migration_probe.php), `GET /` и `docker compose logs php` |
+| Статический конфиг, шифрование и четыре основные таблицы | [Конфиг и шифрование](#конфиг-и-шифрование), [схема БД](#миграции-и-схема-бд) |
+| Метрики, дашборд и проверка сбоя | [Мониторинг канбана](#мониторинг-канбана) |
+| Сессии, cron, маршрутизация и базовый контроллер | [Сессии, cron и HTTP-логи](#сессии-cron-и-http-логи) |
+| MVC, регистрация, вход, выход, операции досок и карточек | [Маршруты и примеры запросов](#api) |
+
 ## Запуск
 
 Нужен Docker с Compose. Первый запуск создаёт локальный `.env` со случайным паролем PostgreSQL и ключом шифрования.
@@ -90,3 +101,41 @@ curl -i -b cookies.txt -c cookies.txt -H 'Content-Type: application/json' \
 - Сервис `cron` раз в минуту запускает `php bin/console sessions:prune`. Статистику удаления видно через `docker compose logs cron`. Ту же команду можно запустить вручную через `docker compose exec php php bin/console sessions:prune`.
 - В `docker compose logs php` видны JSON-записи Monolog с методом, путём, кодом, временем обработки и телом ответа. Пароль, хэш, входящий JSON и cookie в HTTP-лог не попадают. `LOG_PATH` позволяет указать файл вместо стандартного потока ошибок.
 - `Router` передаёт маршрут в `AbstractRequest`. Тот проверяет параметры через `Parameter`, вызывает проверку бизнес-условий и выполняет действие. `FrontendController` отвечает за пользовательские сессии, `BoardController` — за доски, колонки и карточки. `Response` задаёт JSON-ответы и отвечает за отправку HTTP-статуса и заголовков.
+
+## Мониторинг канбана
+
+В исходном Local Zoo Prometheus собирает метрики nginx, PHP-FPM, PostgreSQL и PHP-приложения. В Grafana можно смотреть доступность, длительность и ошибки HTTP-запросов, состояние пула PHP и подключения к БД. Алерты отслеживают сбои компонентов, всплески ошибок и рост задержек. [Исходный стенд](https://github.com/romicharroyo/local_zoo_for_vyatgu)
+
+В канбане `/health` подтверждает, что API читает тестовую запись из PostgreSQL. Даже при выключенном cron вызов продолжает отвечать `200`, а просроченные сессии остаются в таблице. Поэтому задача очистки записывает время последнего успешного запуска и число удалённых сессий в `scheduled_jobs` в одной транзакции с удалением.
+
+| Метрика Prometheus | Что показывает |
+| --- | --- |
+| `probe_success{job="kanban-health"}` | Доступность `/health`, измеренная Blackbox Exporter |
+| `kanban_session_cleanup_age_seconds` | Сколько секунд прошло с успешного запуска или с инициализации задачи |
+| `kanban_session_cleanup_last_success_timestamp_seconds` | Время последнего успешного запуска в Unix-секундах. До первого запуска значение равно 0 |
+| `kanban_expired_sessions` | Сколько просроченных записей сейчас в таблице сессий |
+| `kanban_session_cleanup_deleted_total` | Накопленное число сессий, удалённых задачей |
+
+### Запуск и проверка
+
+Создайте `.env` по инструкции [«Запуск»](#запуск) и выполните команду из корня репозитория.
+
+```sh
+docker compose -f compose.yaml -f compose.monitoring.yaml up -d --build --wait
+```
+
+Откройте [Grafana «Канбан · очистка сессий»](http://127.0.0.1:3001/d/kanban-sessions) и [таргеты Prometheus](http://127.0.0.1:9091/targets). Оба таргета должны стать `UP`. Приложение отдаёт служебные метрики внутри Docker-сети.
+
+1. Дождитесь, пока cron выполнится. Возраст последней очистки на панели будет сбрасываться примерно раз в минуту.
+2. Остановите cron и добавьте одну просроченную сессию в учебную БД.
+
+   ```sh
+   docker compose stop cron
+   docker compose exec postgres psql -U kanban -d kanban -c "INSERT INTO sessions (id, payload, expires_at) VALUES ('demo-expired-session', '', 0) ON CONFLICT DO NOTHING"
+   curl -fsS http://127.0.0.1:8082/health
+   ```
+
+3. Панель просроченных сессий покажет запись, а доступность API останется зелёной. Через примерно три минуты после последней очистки алерт `KanbanSessionCleanupStalled` перейдёт в `firing` на [странице Prometheus](http://127.0.0.1:9091/alerts).
+4. Выполните `docker compose start cron`. После следующего запуска задачи число просроченных сессий и возраст очистки уменьшатся, а алерт погаснет.
+
+Чтобы остановить учебное окружение с мониторингом, выполните `docker compose -f compose.yaml -f compose.monitoring.yaml down`.
