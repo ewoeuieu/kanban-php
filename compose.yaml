@@ -1,4 +1,4 @@
-name: kanban-vyatgu
+name: kanban-php
 
 services:
   postgres:
@@ -16,7 +16,7 @@ services:
       retries: 15
 
   php:
-    image: kanban-vyatgu-php:local
+    image: kanban-php:local
     build: .
     env_file: .env
     command: ["sh", "-c", "php bin/console migrate && exec php-fpm"]
@@ -40,7 +40,7 @@ services:
         condition: service_healthy
 
   cron:
-    image: kanban-vyatgu-php:local
+    image: kanban-php:local
     pull_policy: never
     command: ["cron", "-f"]
     volumes:

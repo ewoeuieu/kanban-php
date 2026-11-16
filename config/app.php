@@ -21,7 +21,7 @@ return [
             'ttl' => 86400,
             'secure' => false,
         ],
-        'message' => 'Учебная канбан-доска',
+        'message' => 'Канбан-доска',
     ],
     'local' => [],
     'testing' => [

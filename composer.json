@@ -1,6 +1,6 @@
 {
-    "name": "ewoeuieu/kanban-vyatgu",
-    "description": "Учебный PHP-бэкенд канбан-доски",
+    "name": "ewoeuieu/kanban-php",
+    "description": "JSON API канбан-доски на PHP",
     "type": "project",
     "require": {
         "php": "^8.5",
