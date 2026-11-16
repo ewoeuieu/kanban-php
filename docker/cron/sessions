@@ -1,0 +1,3 @@
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+* * * * * root cd /app && php bin/console sessions:prune >> /proc/1/fd/1 2>&1

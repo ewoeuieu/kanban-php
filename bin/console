@@ -1,0 +1,66 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Config;
+use App\DatabaseSessionHandler;
+use App\Migrator;
+use App\SecretCipher;
+
+$command = $argv[1] ?? 'help';
+$root = dirname(__DIR__);
+
+try {
+    if ($command === 'init') {
+        $template = file($root . '/.env.example', FILE_IGNORE_NEW_LINES);
+        $values = ['APP_KEY=' => base64_encode(random_bytes(32)), 'DB_PASSWORD=' => bin2hex(random_bytes(24))];
+        $target = @fopen($root . '/.env', 'x');
+        if ($target === false) {
+            throw new RuntimeException('.env уже существует или каталог недоступен для записи.');
+        }
+
+        foreach ($template as $line) {
+            fwrite($target, $line . ($values[$line] ?? '') . PHP_EOL);
+        }
+        fclose($target);
+        chmod($root . '/.env', 0600);
+        echo ".env создан.\n";
+        exit(0);
+    }
+
+    if ($command === 'help') {
+        echo "php bin/console init|key:generate|config:encrypt|config:decrypt|migrate|rollback|status|sessions:prune\n";
+        exit(0);
+    }
+
+    if ($command === 'key:generate') {
+        echo base64_encode(random_bytes(32)) . PHP_EOL;
+        exit(0);
+    }
+
+    if (in_array($command, ['config:encrypt', 'config:decrypt'], true)) {
+        require $root . '/vendor/autoload.php';
+        Dotenv\Dotenv::createUnsafeImmutable($root)->safeLoad();
+        $cipher = new SecretCipher(Config::env('APP_KEY', ''));
+        $input = stream_get_contents(STDIN);
+        if ($command === 'config:encrypt') {
+            echo $cipher->encrypt($input) . PHP_EOL;
+        } else {
+            echo $cipher->decrypt(trim($input));
+        }
+        exit(0);
+    }
+
+    require $root . '/bootstrap.php';
+    if ($command === 'sessions:prune') {
+        $handler = new DatabaseSessionHandler($database->getConnection(), $config['session']['ttl']);
+        $result = ['deleted_sessions' => $handler->gc($config['session']['ttl'])];
+    } else {
+        $migrator = new Migrator($database->getConnection(), $root . '/migrations');
+        $result = $migrator->run($command);
+    }
+    echo json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . PHP_EOL;
+} catch (Throwable $exception) {
+    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+    exit(1);
+}
