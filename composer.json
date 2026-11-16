@@ -1,0 +1,19 @@
+{
+    "name": "ewoeuieu/kanban-vyatgu",
+    "description": "Учебный PHP-бэкенд канбан-доски",
+    "type": "project",
+    "require": {
+        "php": "^8.5",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "ext-pdo_pgsql": "*",
+        "illuminate/database": "^13.0",
+        "monolog/monolog": "^3.0",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}
